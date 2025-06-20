@@ -1,4 +1,5 @@
 #include "main.h"
+#include "vexlog/logger.hpp"
 
 /**
  * A callback function for LLEMU's center button.
