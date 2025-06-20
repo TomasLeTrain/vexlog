@@ -39,6 +39,7 @@ void opcontrol() {
     }
     
     // simulate the particle filter
+
     logger.particles.addParticles(x, y, weights, 500);
 
     logger.generation_info.distance1.setData(0,10.5,10,60,false);
@@ -47,7 +48,8 @@ void opcontrol() {
     logger.generation_info.distance4.setData(3,50.1,58,60,false);
     logger.generation_info.setData(10, 500, 0, 10, 20);
 
-    vexmaps::logger::sendData(&logger);
+    // TODO: in practice the user should not have to specify a length since they likely dont know
+    vexmaps::logger::sendData(&logger,4000);
 
     while(true){
         pros::delay(20);

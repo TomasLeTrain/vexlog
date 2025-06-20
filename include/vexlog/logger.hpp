@@ -1,11 +1,7 @@
 #include "pros/apix.h"
 #include <arm_neon.h>
-#include <array>
 #include <cassert>
 #include <cstring>
-#include <deque>
-#include <list>
-#include <memory>
 #include <vector>
 
 namespace vexmaps {
@@ -20,41 +16,53 @@ namespace logger {
 // [children magic1][children magic2](size in bytes)[child1][child2]...
 // ...
 
-typedef union {
-  float_t a;
-  uint8_t b[4];
-} float_char_t;
+// vectors might still be slow
+// TODO: add error checking
+class LogBuffer {
+private:
+  std::vector<char> buf;
+  // index must always be the size of the vector!
+  size_t ind = 0;
+  void setIndex(size_t i) { ind = i; }
 
-typedef union {
-  float16_t a;
-  uint8_t b[2];
-} float16_char_t;
+public:
+  LogBuffer(size_t len) : buf(len) {}
 
-// order for all is kept the same since it might matter for types like floats
-inline void writeToList(std::list<char> &list, float_char_t data) {
-  list.push_back(data.b[0]);
-  list.push_back(data.b[1]);
-  list.push_back(data.b[2]);
-  list.push_back(data.b[3]);
-}
+  std::vector<char> &getVector() { return buf; }
 
-inline void writeToList(std::list<char> &list, char *data, int len) {
-  for (int i = 0; i < len; i++)
-    list.push_back(data[i]);
-}
+  inline void writeByte(char data) {
+    buf[ind] = data;
+    ind++;
+  }
 
-inline void writeToList(std::list<char> &list, float16_char_t data) {
-  list.push_back(data.b[0]);
-  list.push_back(data.b[1]);
-}
+  void advanceIndex(size_t offset = 1) { ind += offset; }
 
-// TODO: switch to using varints for integers
-inline void writeToList(std::list<char> &list, int32_t data) {
-  list.push_back(data & 0xff);
-  list.push_back((data >> 8) & 0xff);
-  list.push_back((data >> 16) & 0xff);
-  list.push_back((data >> 24) & 0xff);
-}
+  size_t getIndex() { return ind; }
+
+  size_t write(char *data, int len) {
+    for (int i = 0; i < len; i++)
+      writeByte(data[i]);
+    return len;
+  }
+
+  template <typename T> size_t write(T data) {
+    char *char_data = reinterpret_cast<char *>(&data);
+    for (int i = 0; i < sizeof(data); i++) {
+      writeByte(char_data[i]);
+    }
+    return sizeof(data);
+  }
+
+  /**
+   * @brief Writes data at specific index
+   */
+  template <typename... Args> void write_index(int i, Args... args) {
+    size_t currentIndex = getIndex();
+    setIndex(i);
+    write(args...);
+    setIndex(currentIndex);
+  }
+};
 
 class BaseMessageLogger {
 public:
@@ -64,7 +72,9 @@ public:
   // this should be specific to the field
   virtual char getMagic2() = 0;
 
-  virtual std::list<char> LogData() = 0;
+  virtual bool IsData() = 0;
+
+  virtual size_t LogData(LogBuffer *buffer) = 0;
   virtual std::vector<BaseMessageLogger *> getChildren() = 0;
 
   virtual ~BaseMessageLogger() = default;
@@ -77,8 +87,10 @@ private:
 public:
   char getMagic1() override { return basicDataTypeMagic; }
 
+  bool IsData() override { return false; }
+
   // since its a structure this should never get called
-  std::list<char> LogData() override { return {}; }
+  size_t LogData(LogBuffer *buffer) override { return 0; }
 };
 
 class BaseTypeLogger : public BaseMessageLogger {
@@ -86,7 +98,9 @@ class BaseTypeLogger : public BaseMessageLogger {
 
 public:
   char getMagic1() override { return basicDataTypeMagic; }
-  // since its only data this should always return empty
+  bool IsData() override { return true; }
+
+  // this should also never get called
   std::vector<BaseMessageLogger *> getChildren() override { return {}; };
 };
 
@@ -110,7 +124,9 @@ public:
   }
 
   // no data other than the magic
-  std::list<char> LogData() override { return {}; }
+  size_t LogData(LogBuffer *buffer) override {
+    return buffer->write(getMagic2());
+  }
 
   ~BoolLogger() override = default;
 };
@@ -128,12 +144,12 @@ public:
 
   char getMagic2() override { return intMagic; }
 
-  std::list<char> LogData() override {
-    std::list<char> res;
+  size_t LogData(LogBuffer *buffer) override {
     // for now we dont add the first magic since this a basic type
-    res.push_back(getMagic2());
-    writeToList(res, data);
-    return res;
+    size_t len = 0;
+    len += buffer->write(getMagic2());
+    len += buffer->write(data);
+    return len;
   }
 
   ~IntLogger() override = default;
@@ -152,12 +168,12 @@ public:
 
   char getMagic2() override { return floatMagic; }
 
-  std::list<char> LogData() override {
-    std::list<char> res;
+  size_t LogData(LogBuffer *buffer) override {
+    size_t len = 0;
     // for now we dont add the first magic since this a basic type
-    res.push_back(getMagic2());
-    writeToList(res, (float_char_t)data);
-    return res;
+    len += buffer->write(getMagic2());
+    len += buffer->write(data);
+    return len;
   }
 
   ~FloatLogger() override = default;
@@ -182,14 +198,14 @@ public:
 
   char getMagic2() override { return poseMagic; }
 
-  std::list<char> LogData() override {
-    std::list<char> res;
+  size_t LogData(LogBuffer *buffer) override {
+    size_t len = 0;
     // for now we dont add the first magic since this a basic type
-    res.push_back(getMagic2());
-    writeToList(res, (float_char_t)x);
-    writeToList(res, (float_char_t)y);
-    writeToList(res, (float_char_t)z);
-    return res;
+    len += buffer->write(getMagic2());
+    len += buffer->write(x);
+    len += buffer->write(y);
+    len += buffer->write(z);
+    return len;
   }
 
   ~PoseLogger() override = default;
@@ -246,31 +262,32 @@ public:
     this->weights[i] = weight;
   }
 
-  std::list<char> LogData() override {
+  size_t LogData(LogBuffer *buffer) override {
     // TODO: might be able to compress further if we remove the last two
     // bits of the mantissa from x/y
 
-    std::list<char> result;
+    // total len
+    size_t misc_len = 0;
 
-    // since this is a normal datatype we have to handle the length and
-    // magic logic ourselves
-    // This should probably be changed eventually
+    misc_len += buffer->write(getMagic1());
+    misc_len += buffer->write(getMagic2());
+
+    size_t data_len_ind = buffer->getIndex();
+
+    // leave space for len
+    buffer->advanceIndex(4);
+    misc_len += 4;
+
+    size_t data_len = 0;
     for (int i = 0; i < N; i++) {
-      writeToList(result, (float16_char_t)x[i]);
-      writeToList(result, (float16_char_t)y[i]);
-      writeToList(result, (float16_char_t)weights[i]);
+      data_len += buffer->write(x[i]);
+      data_len += buffer->write(y[i]);
+      data_len += buffer->write(weights[i]);
     }
-    // TODO: switch to varint's for this
-    size_t curr_len = result.size();
-    result.push_front((curr_len >> 24) & 0xff);
-    result.push_front((curr_len >> 16) & 0xff);
-    result.push_front((curr_len >> 8) & 0xff);
-    result.push_front((curr_len) & 0xff);
 
-    result.push_front(getMagic2());
-    result.push_front(getMagic1());
+    buffer->write_index(data_len_ind, data_len);
 
-    return result;
+    return misc_len + data_len;
   }
 
   ~ParticlesLogger() override = default;
@@ -360,50 +377,51 @@ public:
 
 // traversing list in dfs order
 // assumes list is getting copied
-inline std::list<char> buildData(BaseMessageLogger *current_message) {
+inline size_t buildData(BaseMessageLogger *current_message, LogBuffer *buffer) {
   auto children = current_message->getChildren();
 
-  if (children.empty()) {
+  if (current_message->IsData()) {
     // not a structure, just data
-    return current_message->LogData();
+    return current_message->LogData(buffer);
   }
 
-  std::list<char> result;
+  // size of magics and data len
+  size_t misc_len = 0;
+
+  misc_len += buffer->write(current_message->getMagic1());
+  misc_len += buffer->write(current_message->getMagic2());
+
+  size_t data_len_ind = buffer->getIndex();
+  // leave space for length
+  buffer->advanceIndex(4);
+  misc_len += 4;
+
+  size_t data_len = 0;
 
   for (auto curr : children) {
-    std::list<char> curr_list = buildData(curr);
-    result.splice(result.end(), curr_list);
+    data_len += buildData(curr, buffer);
   }
-  size_t current_len = result.size();
 
-  // put current_len in front of the list - keeps order of bytes the same
   // TODO: switch to varint's
-  result.push_front((current_len >> 24) & 0xff);
-  result.push_front((current_len >> 16) & 0xff);
-  result.push_front((current_len >> 8) & 0xff);
-  result.push_front((current_len) & 0xff);
+  buffer->write_index(data_len_ind, data_len);
 
-  // append magics
-  result.push_front(current_message->getMagic2());
-  result.push_front(current_message->getMagic1());
-
-  return result;
+  // total size of the message incuding magics and len data
+  return data_len + misc_len;
 }
 
-inline void sendData(BaseMessageLogger *message) {
+inline void sendData(BaseMessageLogger *message, size_t buffer_size) {
   auto start_time = pros::c::micros();
-  std::list<char> data = buildData(message);
-  auto copy_start_time = pros::c::micros();
-  std::string buffer(data.begin(), data.end());
+  LogBuffer buf(buffer_size);
+  size_t final_size = buildData(message, &buf);
   auto end_time = pros::c::micros();
 
   // fine to use endl since we are sending all the data at once
   auto send_start_time = pros::c::micros();
-  std::cout << buffer << std::endl;
+  std::cout.write(buf.getVector().data(), final_size);
+  std::cout << std::endl;
   auto send_end_time = pros::c::micros();
 
   std::cout << "total construction time: " << end_time - start_time
-            << ", copy time: " << end_time - copy_start_time
             << ", sending time: " << send_end_time - send_start_time
             << std::endl;
 }

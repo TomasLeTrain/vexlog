@@ -6,5 +6,4 @@ Simple serialization library specialized for robotics.
 * specialized and vectorized class for serializing large number of particles
 
 ## Todo's
-* switch away from std::list for a faster alternative
 * add variable integers (varints) to reduce size even further
