@@ -4,6 +4,7 @@
 vexmaps::logger::PFLogger<500> logger;
 
 void initialize() {
+    pros::c::serctl(SERCTL_DISABLE_COBS,NULL);
 }
 
 void disabled() {}
@@ -34,6 +35,7 @@ void opcontrol() {
     logger.generation_info.distance4.setData(3,50.1,58,60,false);
     logger.generation_info.setData(10, 500, 0, 10, 20);
 
+    // printf("bruh\n");
     vexmaps::logger::sendData(&logger);
 
     while(true){

@@ -360,11 +360,13 @@ inline std::list<char> buildData(BaseMessageLogger *current_message) {
 
 inline void sendData(BaseMessageLogger *message) {
   std::list<char> data = buildData(message);
-  std::vector<char> buffer(data.begin(), data.end());
+  // std::vector<char> buffer(data.begin(), data.end());
+  std::string buffer(data.begin(), data.end());
 
-  FILE *sout = fopen("sout", "w");
-  fwrite(buffer.data(), sizeof(char), buffer.size(), sout);
-  fclose(sout);
+  std::cout << buffer << std::endl;
+  // FILE *sout = fopen("sout", "w");
+  // fwrite(buffer.data(), sizeof(char), buffer.size(), sout);
+  // fclose(sout);
 }
 
 } // namespace logger
