@@ -40,6 +40,7 @@ void opcontrol() {
     
     // simulate the particle filter
 
+    auto start_time = pros::micros();
     logger.particles.addParticles(x, y, weights, 500);
 
     logger.generation_info.distance1.setData(0,10.5,10,60,false);
@@ -47,9 +48,11 @@ void opcontrol() {
     logger.generation_info.distance3.setData(2,20.0,33,60,false);
     logger.generation_info.distance4.setData(3,50.1,58,60,false);
     logger.generation_info.setData(10, 500, 0, 10, 20);
+    auto end_time = pros::micros();
 
     // TODO: in practice the user should not have to specify a length since they likely dont know
     vexmaps::logger::sendData(&logger,4000);
+    std::cout << "input data time: " << end_time - start_time << std::endl;
 
     while(true){
         pros::delay(20);
