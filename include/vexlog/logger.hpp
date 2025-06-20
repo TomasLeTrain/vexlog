@@ -262,6 +262,14 @@ public:
   IntLogger object_size;
   IntLogger exit;
 
+  void setData(int identifier, float measured_distance, int confidence, int object_size, int exit){
+      this->identifier.setData(identifier);
+      this->measured_distance.setData(measured_distance);
+      this->confidence.setData(confidence);
+      this->object_size.setData(object_size);
+      this->exit.setData(exit);
+  }
+
   char getMagic2() override { return distanceInfoMagic; }
 
   std::vector<BaseMessageLogger *> getChildren() override { return children; };
@@ -287,6 +295,12 @@ public:
   DistanceSensorLogger distance4;
 
   char getMagic2() override { return generationInfoMagic; }
+
+  void setData(int timestamp, int time_taken, float px, float py, float pz){
+      this->timestamp.setData(timestamp);
+      this->time_taken.setData(time_taken);
+      this->prediction.setData(px,py,pz);
+  }
 
   std::vector<BaseMessageLogger *> getChildren() override { return children; };
 
