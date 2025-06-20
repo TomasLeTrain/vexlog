@@ -90,6 +90,31 @@ public:
   std::vector<BaseMessageLogger *> getChildren() override { return {}; };
 };
 
+class BoolLogger : public BaseTypeLogger {
+private:
+  bool data;
+  static constexpr char boolOffMagic = 0x14;
+  static constexpr char boolOnMagic = 0x15;
+
+public:
+  BoolLogger() {}
+  BoolLogger(bool data) : data(data) {}
+
+  void setData(bool data) { this->data = data; }
+
+  char getMagic2() override {
+    if (data)
+      return boolOnMagic;
+    else
+      return boolOffMagic;
+  }
+
+  // no data other than the magic
+  std::list<char> LogData() override { return {}; }
+
+  ~BoolLogger() override = default;
+};
+
 class IntLogger : public BaseTypeLogger {
 private:
   int data;
@@ -236,7 +261,11 @@ public:
       writeToList(result, (float16_char_t)weights[i]);
     }
     // TODO: switch to varint's for this
-    result.push_front(result.size());
+    size_t curr_len = result.size();
+    result.push_front((curr_len >> 24) & 0xff);
+    result.push_front((curr_len >> 16) & 0xff);
+    result.push_front((curr_len >> 8) & 0xff);
+    result.push_front((curr_len) & 0xff);
 
     result.push_front(getMagic2());
     result.push_front(getMagic1());
@@ -255,19 +284,20 @@ private:
                                             &confidence, &object_size, &exit};
 
 public:
-  // TODO: make a string/char and bool class to make this more clear
+  // TODO: make a string/char class to make this more clear
   IntLogger identifier;
   FloatLogger measured_distance;
   IntLogger confidence;
   IntLogger object_size;
-  IntLogger exit;
+  BoolLogger exit;
 
-  void setData(int identifier, float measured_distance, int confidence, int object_size, int exit){
-      this->identifier.setData(identifier);
-      this->measured_distance.setData(measured_distance);
-      this->confidence.setData(confidence);
-      this->object_size.setData(object_size);
-      this->exit.setData(exit);
+  void setData(int identifier, float measured_distance, int confidence,
+               int object_size, int exit) {
+    this->identifier.setData(identifier);
+    this->measured_distance.setData(measured_distance);
+    this->confidence.setData(confidence);
+    this->object_size.setData(object_size);
+    this->exit.setData(exit);
   }
 
   char getMagic2() override { return distanceInfoMagic; }
@@ -283,7 +313,9 @@ class GenerationInfoLogger : public CategoryLogger {
 private:
   static constexpr char generationInfoMagic = 0x40;
 
-  std::vector<BaseMessageLogger *> children{&timestamp};
+  std::vector<BaseMessageLogger *> children{
+      &timestamp, &time_taken, &prediction, &distance1,
+      &distance2, &distance3,  &distance4};
 
 public:
   IntLogger timestamp;
@@ -296,10 +328,10 @@ public:
 
   char getMagic2() override { return generationInfoMagic; }
 
-  void setData(int timestamp, int time_taken, float px, float py, float pz){
-      this->timestamp.setData(timestamp);
-      this->time_taken.setData(time_taken);
-      this->prediction.setData(px,py,pz);
+  void setData(int timestamp, int time_taken, float px, float py, float pz) {
+    this->timestamp.setData(timestamp);
+    this->time_taken.setData(time_taken);
+    this->prediction.setData(px, py, pz);
   }
 
   std::vector<BaseMessageLogger *> getChildren() override { return children; };
@@ -359,14 +391,21 @@ inline std::list<char> buildData(BaseMessageLogger *current_message) {
 }
 
 inline void sendData(BaseMessageLogger *message) {
+  auto start_time = pros::c::micros();
   std::list<char> data = buildData(message);
-  // std::vector<char> buffer(data.begin(), data.end());
+  auto copy_start_time = pros::c::micros();
   std::string buffer(data.begin(), data.end());
+  auto end_time = pros::c::micros();
 
+  // fine to use endl since we are sending all the data at once
+  auto send_start_time = pros::c::micros();
   std::cout << buffer << std::endl;
-  // FILE *sout = fopen("sout", "w");
-  // fwrite(buffer.data(), sizeof(char), buffer.size(), sout);
-  // fclose(sout);
+  auto send_end_time = pros::c::micros();
+
+  std::cout << "total construction time: " << end_time - start_time
+            << ", copy time: " << end_time - copy_start_time
+            << ", sending time: " << send_end_time - send_start_time
+            << std::endl;
 }
 
 } // namespace logger

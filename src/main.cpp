@@ -1,5 +1,6 @@
 #include "main.h"
 #include "vexlog/logger.hpp"
+#include <cmath>
 
 vexmaps::logger::PFLogger<500> logger;
 
@@ -20,10 +21,21 @@ void opcontrol() {
     y[0] = 0.0001;
     weights[0] = 0.0001;
 
+    // fake some data
     for(int i = 1;i < 500;i++){
         x[i] = x[i-1]*1.25;
         y[i] = y[i-1]*1.55;
-        weights[i] = weights[i-1]*2;
+        weights[i] = weights[i-1] * 2;
+
+        if(fabsf(x[i]) > 1.87){
+            x[i] = x[i] >= 0 ? -1 : 1;
+            x[i] *= 0.0001;
+        }
+        if(fabsf(y[i]) > 1.87){
+            y[i] = y[i] >= 0 ? -1 : 1;
+            y[i] *= 0.0001;
+        }
+        if(weights[i] > 100) weights[i] = 0.00001;
     }
     
     // simulate the particle filter
@@ -35,7 +47,6 @@ void opcontrol() {
     logger.generation_info.distance4.setData(3,50.1,58,60,false);
     logger.generation_info.setData(10, 500, 0, 10, 20);
 
-    // printf("bruh\n");
     vexmaps::logger::sendData(&logger);
 
     while(true){
