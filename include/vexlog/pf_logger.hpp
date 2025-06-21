@@ -5,6 +5,7 @@
 
 #include "float_compression.hpp"
 #include "logger.hpp"
+#include <utility>
 
 // TODO: put all magics in one place
 
@@ -113,10 +114,10 @@ private:
 
 public:
   // TODO: make a string/char class to make this more clear
-  IntLogger identifier;
+  UIntLogger identifier;
   FloatLogger measured_distance;
-  IntLogger confidence;
-  IntLogger object_size;
+  UIntLogger confidence;
+  UIntLogger object_size;
   BoolLogger exit;
 
   void setData(int identifier, float measured_distance, int confidence,
@@ -142,6 +143,9 @@ private:
   uint16_t x[N];
   uint16_t y[N];
   uint16_t weights[N];
+  std::pair<float, float> x_bounds;
+  std::pair<float, float> y_bounds;
+  std::pair<float, float> weights_bounds;
 
   static constexpr char particleLoggerMagic = 0x49;
 
@@ -154,9 +158,36 @@ public:
     // since we rely on delta encoding we must have all the values right now
     assert((len == N) && "must give the same amount of particles");
 
-    compress_floats(x, this->x, N);
-    compress_floats(y, this->y, N);
-    compress_floats(weights, this->weights, N);
+    // calculate bounds
+    x_bounds.first = y_bounds.second = x[0];
+    y_bounds.first = y_bounds.second = y[0];
+    weights_bounds.first = weights_bounds.second = weights[0];
+
+    // TODO: vectorize
+    for (int i = 1; i < N; i++) {
+      x_bounds.first = fminf(x[i], x_bounds.first);
+      y_bounds.second = fmaxf(x[i], x_bounds.second);
+
+      y_bounds.first = fminf(y[i], y_bounds.first);
+      y_bounds.second = fmaxf(y[i], y_bounds.second);
+
+      weights_bounds.first = fminf(weights[i], weights_bounds.first);
+      weights_bounds.second = fmaxf(weights[i], weights_bounds.second);
+    }
+
+    // 140.4/2^9 = 0.27 -> error of 0.27 inches is probably fine
+    compress_floats(x, this->x, N, x_bounds.first, x_bounds.second, 1<<7);
+    compress_floats(y, this->y, N, y_bounds.first, y_bounds.second, 1<<7);
+
+    // weights have to be somewhat precise because they do have a high range
+    // however it could greatly benefit from delta's since most weights will be small
+    compress_floats(weights, this->weights, N, weights_bounds.first,
+                    weights_bounds.second,2);
+
+    // compress_floats(x, this->x, N, -1.78308, 1.78308);
+    // compress_floats(y, this->y, N, -1.78308, 1.78308);
+    // compress_floats(weights, this->weights, N, 0,
+    //                 200);
   }
 
   size_t LogData(LogBuffer *buffer) override {
@@ -173,6 +204,13 @@ public:
     misc_len += 4;
 
     size_t data_len = 0;
+    // write bounds for each category
+    data_len = buffer->write(x_bounds.first);
+    data_len = buffer->write(x_bounds.second);
+    data_len = buffer->write(y_bounds.first);
+    data_len = buffer->write(y_bounds.second);
+    data_len = buffer->write(weights_bounds.first);
+    data_len = buffer->write(weights_bounds.second);
 
     for (int i = 0; i < N; i++) {
       data_len += buffer->write_varint(x[i]);
@@ -199,8 +237,8 @@ private:
       &distance2, &distance3,  &distance4};
 
 public:
-  IntLogger timestamp;
-  IntLogger time_taken;
+  UIntLogger timestamp;
+  UIntLogger time_taken;
   PoseLogger prediction;
   DistanceSensorLogger distance1;
   DistanceSensorLogger distance2;

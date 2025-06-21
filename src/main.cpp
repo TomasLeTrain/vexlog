@@ -1,6 +1,9 @@
 #include "main.h"
 #include "vexlog/logger.hpp"
+#include "vexlog/pf_logger.hpp"
 #include <cmath>
+#include <random>
+#include <tuple>
 
 vexmaps::logger::PFLogger<500> logger;
 
@@ -21,26 +24,51 @@ void opcontrol() {
     y[0] = 0.0001;
     weights[0] = 0.0001;
 
-    // fake some data
-    for(int i = 1;i < 500;i++){
-        x[i] = x[i-1]*1.25;
-        y[i] = y[i-1]*1.55;
-        weights[i] = weights[i-1] * 2;
+    std::ranlux24_base rng;
 
-        if(fabsf(x[i]) > 1.87){
-            x[i] = x[i] >= 0 ? -1 : 1;
-            x[i] *= 0.0001;
-        }
-        if(fabsf(y[i]) > 1.87){
-            y[i] = y[i] >= 0 ? -1 : 1;
-            y[i] *= 0.0001;
-        }
-        if(weights[i] > 100) weights[i] = 0.00001;
+    std::uniform_real_distribution<float> x_dist(-1.27,-1.2192);
+    std::uniform_real_distribution<float> y_dist(0.762,1.016);
+    std::normal_distribution<float> weight_dist(0.0001,1/7);
+
+    // fake some data
+    // for(int i = 1;i < 500;i++){
+    //     x[i] = x[i-1]*1.25;
+    //     y[i] = y[i-1]*1.55;
+    //     weights[i] = weights[i-1] * 2;
+    //
+    //     if(fabsf(x[i]) > 1.87){
+    //         x[i] = x[i] >= 0 ? -1 : 1;
+    //         x[i] *= 0.0001;
+    //     }
+    //     if(fabsf(y[i]) > 1.87){
+    //         y[i] = y[i] >= 0 ? -1 : 1;
+    //         y[i] *= 0.0001;
+    //     }
+    //     if(weights[i] > 100) weights[i] = 0.00001;
+    // }
+    std::vector<std::tuple<float,float,float>> particles;
+
+    for(int i = 0;i < 500;i++){
+        particles.emplace_back(
+        fabsf(weight_dist(rng)), // sort by weight first
+        fabsf(x_dist(rng)),
+        fabsf(y_dist(rng))
+        );
     }
+    sort(particles.begin(),particles.end());
+
+    for(int i = 0;i < 500;i++){
+        particles.emplace_back(
+        fabsf(x_dist(rng)),
+        fabsf(y_dist(rng)),
+        fabsf(weight_dist(rng)));
+    }
+
+
     
+    auto start_time = pros::micros();
     // simulate the particle filter
 
-    auto start_time = pros::micros();
     logger.particles.addParticles(x, y, weights, 500);
 
     logger.generation_info.distance1.setData(0,10.5,10,60,false);

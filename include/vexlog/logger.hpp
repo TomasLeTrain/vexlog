@@ -190,6 +190,30 @@ public:
   ~IntLogger() override = default;
 };
 
+class UIntLogger : public BaseTypeLogger {
+private:
+  uint32_t data;
+  static constexpr char intMagic = 0x16;
+
+public:
+  UIntLogger() {}
+  UIntLogger(uint32_t data) : data(data) {}
+
+  void setData(int data) { this->data = data; }
+
+  char getMagic2() override { return intMagic; }
+
+  size_t LogData(LogBuffer *buffer) override {
+    // for now we dont add the first magic since this a basic type
+    size_t len = 0;
+    len += buffer->write(getMagic2());
+    len += buffer->write_varint(data);
+    return len;
+  }
+
+  ~UIntLogger() override = default;
+};
+
 class FloatLogger : public BaseTypeLogger {
 private:
   float data;
