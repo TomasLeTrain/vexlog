@@ -109,6 +109,11 @@ public:
 
   virtual bool IsData() = 0;
 
+  /**
+   * @brief Returns max possible size of this message in bytes
+   */
+  virtual size_t maxSize() = 0;
+
   virtual size_t LogData(LogBuffer *buffer) = 0;
   virtual std::vector<BaseMessageLogger *> getChildren() = 0;
 
@@ -163,6 +168,8 @@ public:
     return buffer->write(getMagic2());
   }
 
+  size_t maxSize() override { return 1; }
+
   ~BoolLogger() override = default;
 };
 
@@ -186,6 +193,8 @@ public:
     len += buffer->write_varint(data);
     return len;
   }
+
+  size_t maxSize() override { return 1 + sizeof(int32_t); }
 
   ~IntLogger() override = default;
 };
@@ -211,6 +220,8 @@ public:
     return len;
   }
 
+  size_t maxSize() override { return 1 + sizeof(uint32_t); }
+
   ~UIntLogger() override = default;
 };
 
@@ -234,6 +245,8 @@ public:
     len += buffer->write(data);
     return len;
   }
+
+  size_t maxSize() override { return 1 + sizeof(float); }
 
   ~FloatLogger() override = default;
 };
@@ -266,6 +279,8 @@ public:
     len += buffer->write(z);
     return len;
   }
+
+  size_t maxSize() override { return 1 + 3 * sizeof(float); }
 
   ~PoseLogger() override = default;
 };
@@ -306,7 +321,8 @@ inline size_t buildData(BaseMessageLogger *current_message, LogBuffer *buffer) {
 
 inline void sendData(BaseMessageLogger *message, size_t buffer_size) {
   auto start_time = pros::c::micros();
-  LogBuffer buf(buffer_size);
+  LogBuffer buf(message->maxSize() + 200);
+
   size_t final_size = buildData(message, &buf);
   auto end_time = pros::c::micros();
 

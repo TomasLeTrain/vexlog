@@ -102,6 +102,11 @@ public:
     return misc_len + data_len;
   }
 
+  // two bytes per particle
+  size_t maxSize() override {
+    return 2 + sizeof(uint32_t) + 3 * N * sizeof(float16_t);
+  }
+
   ~Float16ParticlesLogger() override = default;
 };
 
@@ -133,6 +138,14 @@ public:
 
   std::vector<BaseMessageLogger *> getChildren() override { return children; };
 
+  size_t maxSize() override {
+    size_t len = 0;
+    for (auto curr : children) {
+      len += curr->maxSize();
+    }
+    return len;
+  }
+
   ~DistanceSensorLogger() override = default;
 };
 
@@ -140,9 +153,9 @@ public:
 // representations for floats as well as varints
 template <size_t N> class VarintParticlesLogger : public BaseTypeLogger {
 private:
-  uint16_t x[N];
-  uint16_t y[N];
-  uint16_t weights[N];
+  int16_t x[N];
+  int16_t y[N];
+  int16_t weights[N];
   std::pair<float, float> x_bounds;
   std::pair<float, float> y_bounds;
   std::pair<float, float> weights_bounds;
@@ -159,30 +172,31 @@ public:
     assert((len == N) && "must give the same amount of particles");
 
     // calculate bounds
-    x_bounds.first = y_bounds.second = x[0];
+    x_bounds.first = x_bounds.second = x[0];
     y_bounds.first = y_bounds.second = y[0];
     weights_bounds.first = weights_bounds.second = weights[0];
 
     // TODO: vectorize
     for (int i = 1; i < N; i++) {
-      x_bounds.first = fminf(x[i], x_bounds.first);
-      y_bounds.second = fmaxf(x[i], x_bounds.second);
+      x_bounds.first = std::min(x[i], x_bounds.first);
+      x_bounds.second = std::max(x[i], x_bounds.second);
 
-      y_bounds.first = fminf(y[i], y_bounds.first);
-      y_bounds.second = fmaxf(y[i], y_bounds.second);
+      y_bounds.first = std::min(y[i], y_bounds.first);
+      y_bounds.second = std::max(y[i], y_bounds.second);
 
-      weights_bounds.first = fminf(weights[i], weights_bounds.first);
-      weights_bounds.second = fmaxf(weights[i], weights_bounds.second);
+      weights_bounds.first = std::min(weights[i], weights_bounds.first);
+      weights_bounds.second = std::max(weights[i], weights_bounds.second);
     }
 
     // 140.4/2^9 = 0.27 -> error of 0.27 inches is probably fine
-    compress_floats(x, this->x, N, x_bounds.first, x_bounds.second, 1<<7);
-    compress_floats(y, this->y, N, y_bounds.first, y_bounds.second, 1<<7);
+    compress_floats(x, this->x, N, x_bounds.first, x_bounds.second, 1 << 6);
+    compress_floats(y, this->y, N, y_bounds.first, y_bounds.second, 1 << 6);
 
     // weights have to be somewhat precise because they do have a high range
-    // however it could greatly benefit from delta's since most weights will be small
+    // however it could greatly benefit from delta's since most weights will be
+    // small
     compress_floats(weights, this->weights, N, weights_bounds.first,
-                    weights_bounds.second,2);
+                    weights_bounds.second);
 
     // compress_floats(x, this->x, N, -1.78308, 1.78308);
     // compress_floats(y, this->y, N, -1.78308, 1.78308);
@@ -214,13 +228,25 @@ public:
 
     for (int i = 0; i < N; i++) {
       data_len += buffer->write_varint(x[i]);
+    }
+    for (int i = 0; i < N; i++) {
       data_len += buffer->write_varint(y[i]);
+    }
+    for (int i = 0; i < N; i++) {
       data_len += buffer->write_varint(weights[i]);
     }
 
     buffer->write_index(data_len_ind, data_len);
 
     return misc_len + data_len;
+  }
+
+  // at most three bytes per particle
+  size_t maxSize() override {
+    return 2 * sizeof(char) +     // magic
+           1 * sizeof(uint32_t) + // len
+           6 * sizeof(float) +    // bounds
+           3 * N * 3;             // particles
   }
 
   ~VarintParticlesLogger() override = default;
@@ -255,6 +281,14 @@ public:
 
   std::vector<BaseMessageLogger *> getChildren() override { return children; };
 
+  size_t maxSize() override {
+    size_t len = 0;
+    for (auto curr : children) {
+      len += curr->maxSize();
+    }
+    return len;
+  }
+
   ~GenerationInfoLogger() override = default;
 };
 
@@ -273,6 +307,14 @@ public:
   char getMagic2() override { return PFMagic; }
 
   std::vector<BaseMessageLogger *> getChildren() override { return children; }
+
+  size_t maxSize() override {
+    size_t len = 0;
+    for (auto curr : children) {
+      len += curr->maxSize();
+    }
+    return len;
+  }
 
   ~PFLogger() override = default;
 };

@@ -15,7 +15,7 @@ namespace logger {
  */
 inline void compress_floats(float *data, int16_t *result, size_t len, float a, float b, int precision = 1) {
   //  a/2^15
-  const float c0 = static_cast<float>(65536 / precision) / (b - a);
+  const float c0 = static_cast<float>((1<<15) / precision) / (b - a);
   // r = (x - a) * c0
   // r = x * c0 - a * c0
   // r = (-a * c0) + x * c0
@@ -38,24 +38,24 @@ inline void compress_floats(float *data, int16_t *result, size_t len, float a, f
     v3 = vmlaq_f32(vc1, v3, vc0);
     v4 = vmlaq_f32(vc1, v4, vc0);
 
-    uint32x4_t converted1 = vcvtq_u32_f32(v1);
-    uint32x4_t converted2 = vcvtq_u32_f32(v2);
-    uint32x4_t converted3 = vcvtq_u32_f32(v3);
-    uint32x4_t converted4 = vcvtq_u32_f32(v4);
+    int32x4_t converted1 = vcvtq_s32_f32(v1);
+    int32x4_t converted2 = vcvtq_s32_f32(v2);
+    int32x4_t converted3 = vcvtq_s32_f32(v3);
+    int32x4_t converted4 = vcvtq_s32_f32(v4);
 
-    uint16x4_t final1 = vmovn_u32(converted1);
-    uint16x4_t final2 = vmovn_u32(converted2);
-    uint16x4_t final3 = vmovn_u32(converted3);
-    uint16x4_t final4 = vmovn_u32(converted4);
+    int16x4_t final1 = vmovn_s32(converted1);
+    int16x4_t final2 = vmovn_s32(converted2);
+    int16x4_t final3 = vmovn_s32(converted3);
+    int16x4_t final4 = vmovn_s32(converted4);
     // store results
-    vst1_u16((uint16_t*)(result + i), final1);
-    vst1_u16((uint16_t*)(result + i + 4), final2);
-    vst1_u16((uint16_t*)(result + i + 8), final3);
-    vst1_u16((uint16_t*)(result + i + 12), final4);
+    vst1_s16(result + i, final1);
+    vst1_s16(result + i + 4, final2);
+    vst1_s16(result + i + 8, final3);
+    vst1_s16(result + i + 12, final4);
   }
   // go through remaining particles if neccesary
   for (int i = remaining_floats; i < len; i++) {
-    result[i] = static_cast<uint16_t>(c1 + data[i] * c0);
+    result[i] = static_cast<int16_t>(c1 + data[i] * c0);
   }
 
   // we assume particles will be vaguely near each other, so we can try and use
