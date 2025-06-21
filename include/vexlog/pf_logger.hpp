@@ -153,12 +153,15 @@ public:
 // representations for floats as well as varints
 template <size_t N> class VarintParticlesLogger : public BaseTypeLogger {
 private:
-  int16_t x[N];
-  int16_t y[N];
-  int16_t weights[N];
+  uint16_t x[N];
+  uint16_t y[N];
+  uint16_t weights[N];
   std::pair<float, float> x_bounds;
   std::pair<float, float> y_bounds;
   std::pair<float, float> weights_bounds;
+  uint32_t x_mod;
+  uint32_t y_mod;
+  uint32_t weights_mod;
 
   static constexpr char particleLoggerMagic = 0x49;
 
@@ -189,19 +192,14 @@ public:
     }
 
     // 140.4/2^9 = 0.27 -> error of 0.27 inches is probably fine
-    compress_floats(x, this->x, N, x_bounds.first, x_bounds.second, 1 << 6);
-    compress_floats(y, this->y, N, y_bounds.first, y_bounds.second, 1 << 6);
+    x_mod = compress_floats(x, this->x, N, x_bounds.first, x_bounds.second, 1 << 6);
+    y_mod = compress_floats(y, this->y, N, y_bounds.first, y_bounds.second, 1 << 6);
 
     // weights have to be somewhat precise because they do have a high range
     // however it could greatly benefit from delta's since most weights will be
     // small
-    compress_floats(weights, this->weights, N, weights_bounds.first,
+    weights_mod = compress_floats(weights, this->weights, N, weights_bounds.first,
                     weights_bounds.second);
-
-    // compress_floats(x, this->x, N, -1.78308, 1.78308);
-    // compress_floats(y, this->y, N, -1.78308, 1.78308);
-    // compress_floats(weights, this->weights, N, 0,
-    //                 200);
   }
 
   size_t LogData(LogBuffer *buffer) override {
@@ -219,12 +217,17 @@ public:
 
     size_t data_len = 0;
     // write bounds for each category
-    data_len = buffer->write(x_bounds.first);
-    data_len = buffer->write(x_bounds.second);
-    data_len = buffer->write(y_bounds.first);
-    data_len = buffer->write(y_bounds.second);
-    data_len = buffer->write(weights_bounds.first);
-    data_len = buffer->write(weights_bounds.second);
+    data_len += buffer->write(x_bounds.first);
+    data_len += buffer->write(x_bounds.second);
+    data_len += buffer->write(x_mod);
+
+    data_len += buffer->write(y_bounds.first);
+    data_len += buffer->write(y_bounds.second);
+    data_len += buffer->write(y_mod);
+
+    data_len += buffer->write(weights_bounds.first);
+    data_len += buffer->write(weights_bounds.second);
+    data_len += buffer->write(weights_mod);
 
     for (int i = 0; i < N; i++) {
       data_len += buffer->write_varint(x[i]);
