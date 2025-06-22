@@ -5,7 +5,7 @@
 #include <random>
 #include <tuple>
 
-const size_t N = 2048;
+const size_t N = 3072;
 
 vexmaps::logger::PFLogger<N> logger;
 
@@ -32,6 +32,7 @@ void opcontrol() {
     particles.emplace_back(std::abs(weight_dist(rng)), x_dist(rng),
                            y_dist(rng));
   }
+  
   sort(particles.begin(), particles.end());
 
   for (int i = 0; i < N; i++) {

@@ -12,6 +12,8 @@
 #include <type_traits>
 #include <vector>
 
+#include "lz4/lz4.h"
+
 namespace vexmaps {
 namespace logger {
 
@@ -326,14 +328,28 @@ inline void sendData(BaseMessageLogger *message) {
   size_t final_size = buildData(message, &buf);
   auto end_time = pros::c::micros();
 
+  auto compress_start_time = pros::c::micros();
+  // same size as the buf vector
+  std::vector<char> compressed_data(LZ4_compressBound(buf.getVector().size()));
+
+  int compressed_size =
+      LZ4_compress_default(buf.getVector().data(), compressed_data.data(),
+                           final_size, compressed_data.size());
+
+  assert((compressed_size != 0) && "compression failed");
+  compressed_data.resize(compressed_size);
+  auto compress_end_time = pros::c::micros();
+
   // fine to use endl since we are sending all the data at once
   auto send_start_time = pros::c::micros();
-  std::cout.write(buf.getVector().data(), final_size);
+  std::cout.write(compressed_data.data(), compressed_size);
   std::cout << std::endl;
   auto send_end_time = pros::c::micros();
 
   std::cout << "total construction time: " << end_time - start_time
             << ", sending time: " << send_end_time - send_start_time
+            << ", compress time: " << compress_end_time - compress_start_time
+            << ", og/new size: " << final_size << " - " << compressed_size
             << std::endl;
 }
 
