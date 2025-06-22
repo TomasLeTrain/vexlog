@@ -319,7 +319,7 @@ inline size_t buildData(BaseMessageLogger *current_message, LogBuffer *buffer) {
   return data_len + misc_len;
 }
 
-inline void sendData(BaseMessageLogger *message, size_t buffer_size) {
+inline void sendData(BaseMessageLogger *message) {
   auto start_time = pros::c::micros();
   LogBuffer buf(message->maxSize() + 200);
 

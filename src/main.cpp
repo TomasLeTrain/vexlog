@@ -5,7 +5,7 @@
 #include <random>
 #include <tuple>
 
-const size_t N = 1024;
+const size_t N = 2048;
 
 vexmaps::logger::PFLogger<N> logger;
 
@@ -22,22 +22,22 @@ void opcontrol() {
 
   std::ranlux24_base rng;
 
-  std::uniform_real_distribution<float> x_dist(-1.28, -1.2);
-  std::uniform_real_distribution<float> y_dist(0.762, 1.016);
-  std::normal_distribution<float> weight_dist(0.2, 0.75);
+  std::uniform_real_distribution<float> x_dist(-70 * 0.0254, -40 * 0.0254);
+  std::uniform_real_distribution<float> y_dist( 20 * 0.0254,  40 * 0.0254);
+  std::normal_distribution<float> weight_dist(0.2, 0.9);
 
   std::vector<std::tuple<float, float, float>> particles;
 
   for (int i = 0; i < N; i++) {
-    particles.emplace_back(x_dist(rng), std::abs(weight_dist(rng)), y_dist(rng));
+    particles.emplace_back(std::abs(weight_dist(rng)), x_dist(rng),
+                           y_dist(rng));
   }
   sort(particles.begin(), particles.end());
 
   for (int i = 0; i < N; i++) {
-    x[i] = std::get<0>(particles[i]);
+    weights[i] = std::get<0>(particles[i]);
+    x[i] = std::get<1>(particles[i]);
     y[i] = std::get<2>(particles[i]);
-
-    weights[i] = std::get<1>(particles[i]);
   }
 
   auto start_time = pros::micros();
@@ -55,7 +55,7 @@ void opcontrol() {
 
   // TODO: in practice the user should not have to specify a length since they
   // likely dont know
-  vexmaps::logger::sendData(&logger, 10000);
+  vexmaps::logger::sendData(&logger);
   std::cout << "input data time: " << end_time - start_time << std::endl;
 
   while (true) {

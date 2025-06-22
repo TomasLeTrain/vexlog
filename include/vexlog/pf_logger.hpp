@@ -153,12 +153,12 @@ public:
 // representations for floats as well as varints
 template <size_t N> class VarintParticlesLogger : public BaseTypeLogger {
 private:
-  uint16_t x[N];
-  uint16_t y[N];
-  uint16_t weights[N];
+  int16_t x[N];
+  int16_t y[N];
+  int16_t weights[N];
   std::pair<float, float> x_bounds;
   std::pair<float, float> y_bounds;
-  std::pair<float, float> weights_bounds;
+  std::pair<float, float> weight_bounds;
   uint32_t x_mod;
   uint32_t y_mod;
   uint32_t weights_mod;
@@ -177,7 +177,7 @@ public:
     // calculate bounds
     x_bounds.first = x_bounds.second = x[0];
     y_bounds.first = y_bounds.second = y[0];
-    weights_bounds.first = weights_bounds.second = weights[0];
+    weight_bounds.first = weight_bounds.second = weights[0];
 
     // TODO: vectorize
     for (int i = 1; i < N; i++) {
@@ -187,19 +187,32 @@ public:
       y_bounds.first = std::min(y[i], y_bounds.first);
       y_bounds.second = std::max(y[i], y_bounds.second);
 
-      weights_bounds.first = std::min(weights[i], weights_bounds.first);
-      weights_bounds.second = std::max(weights[i], weights_bounds.second);
+      weight_bounds.first = std::min(weights[i], weight_bounds.first);
+      weight_bounds.second = std::max(weights[i], weight_bounds.second);
     }
 
-    // 140.4/2^9 = 0.27 -> error of 0.27 inches is probably fine
-    x_mod = compress_floats(x, this->x, N, x_bounds.first, x_bounds.second, 1 << 6);
-    y_mod = compress_floats(y, this->y, N, y_bounds.first, y_bounds.second, 1 << 6);
+    float x_difference = x_bounds.second - x_bounds.first;
+    float y_difference = y_bounds.second - y_bounds.first;
+    float weight_difference = weight_bounds.second - weight_bounds.first;
+
+    // aiming for a 0.25 inch error
+    // difference / x = 0.2
+    // difference * 4 = x
+
+    // equivalent to the floor(log2) - means error might be higher than expected
+    uint32_t x_mod = static_cast<uint32_t>(4 * x_difference / 0.0254);
+    uint32_t y_mod = static_cast<uint32_t>(4 * y_difference / 0.0254);
+
+    x_mod =
+        compress_floats(x, this->x, N, x_bounds.first, x_bounds.second, x_mod);
+    y_mod =
+        compress_floats(y, this->y, N, y_bounds.first, y_bounds.second, y_mod);
 
     // weights have to be somewhat precise because they do have a high range
     // however it could greatly benefit from delta's since most weights will be
     // small
-    weights_mod = compress_floats(weights, this->weights, N, weights_bounds.first,
-                    weights_bounds.second);
+    weights_mod = compress_floats(weights, this->weights, N,
+                                  weight_bounds.first, weight_bounds.second);
   }
 
   size_t LogData(LogBuffer *buffer) override {
@@ -219,15 +232,15 @@ public:
     // write bounds for each category
     data_len += buffer->write(x_bounds.first);
     data_len += buffer->write(x_bounds.second);
-    data_len += buffer->write(x_mod);
+    data_len += buffer->write_varint(x_mod);
 
     data_len += buffer->write(y_bounds.first);
     data_len += buffer->write(y_bounds.second);
-    data_len += buffer->write(y_mod);
+    data_len += buffer->write_varint(y_mod);
 
-    data_len += buffer->write(weights_bounds.first);
-    data_len += buffer->write(weights_bounds.second);
-    data_len += buffer->write(weights_mod);
+    data_len += buffer->write(weight_bounds.first);
+    data_len += buffer->write(weight_bounds.second);
+    data_len += buffer->write_varint(weights_mod);
 
     for (int i = 0; i < N; i++) {
       data_len += buffer->write_varint(x[i]);
